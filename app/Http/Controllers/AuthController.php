@@ -18,6 +18,7 @@ class AuthController extends Controller
             'email' => 'required|string|email|max:255|unique:users',
             'phone_number'=> 'sometimes|string|min:10|max:14|unique:users,phone_number',
             'password' => 'required|string|min:8|confirmed',
+            'role' => 'required|in:user,employee,admin',
         ]);
 
         if ($validator->fails()) {
@@ -31,6 +32,8 @@ class AuthController extends Controller
             'email' => $request->email,
             'phone_number' => $request->phone_number,
             'password' => Hash::make($request->password),
+            'role' => $request->role,
+            'status' => $request->role === 'employee' ? 'pending' : 'approved',
         ]);
 
         $user = User::where('email', $request->email)->firstOrFail();
@@ -56,6 +59,13 @@ class AuthController extends Controller
         }
 
         $user = User::where('email', $request->email)->firstOrFail();
+
+        if ($user->status !== 'approved') {
+            return response()->json([
+                'message' => 'Account is not approved yet'
+            ], 403);
+        }
+
         $token = $user->createToken('auth_token')->plainTextToken;
 
         return response()->json([

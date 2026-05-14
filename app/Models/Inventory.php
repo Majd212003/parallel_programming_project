@@ -8,13 +8,22 @@ use Illuminate\Database\Eloquent\Model;
 class Inventory extends Model
 {
     use HasFactory;
+    protected $table = 'inventories';
+
     protected $fillable = [
+        'name',
+        'description',
+        'user_id',
         'product_id',
-        'quantity',
-        'version'
     ];
+
     public function product()
     {
-        return $this->belongsTo(Product::class);
+        return $this->hasMany(Product::class);
+    }
+
+    public function user()
+    {
+        return $this->belongsTo(User::class);
     }
 }

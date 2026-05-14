@@ -8,12 +8,20 @@ use Illuminate\Database\Eloquent\Model;
 class OrderItem extends Model
 {
     use HasFactory;
+
     protected $table = 'order_items';
+
     protected $fillable = [
         'order_id',
         'product_id',
         'quantity',
-        'price_at_purchase'
+        'total_amount',
+        'price_at_purchase',
+    ];
+
+    protected $casts = [
+        'total_amount' => 'decimal:2',
+        'price_at_purchase' => 'decimal:2',
     ];
 
     public function order()
