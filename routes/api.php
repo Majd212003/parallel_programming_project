@@ -2,10 +2,10 @@
 
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\FavouritesController;
-use App\Http\Controllers\InventoryController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\ProductController;
+use App\Http\Controllers\StoreController;
 use App\Http\Controllers\UserController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -34,7 +34,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/products', [ProductController::class, 'index']);
     Route::get('/products/{product}', [ProductController::class, 'show']);
 
-    Route::get('/inventory', [InventoryController::class, 'index']);
+    Route::get('/Store', [StoreController::class, 'index']);
 
     Route::get('/cart', [OrderController::class, 'currentCart']);
     Route::post('/cart/add', [OrderController::class, 'addToCart']);
@@ -57,9 +57,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/products/{product}', [ProductController::class, 'update']);
         Route::delete('/products/{product}', [ProductController::class, 'destroy']);
 
-        Route::post('/inventory', [InventoryController::class, 'store']);
-        Route::put('/inventory/{inventory}', [InventoryController::class, 'update']);
-        Route::delete('/inventory/{inventory}', [InventoryController::class, 'destroy']);
+        Route::post('/Store', [StoreController::class, 'store']);
+        Route::put('/Store/{Store}', [StoreController::class, 'update']);
+        Route::delete('/Store/{Store}', [StoreController::class, 'destroy']);
     });
 
     Route::middleware('role:admin')->group(function () {

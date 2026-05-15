@@ -2,15 +2,16 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Inventory;
+
+use App\Models\Store;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
-class InventoryController extends Controller
+class StoreController extends Controller
 {
     public function index()
     {
-        return response()->json(Inventory::with(['product', 'user'])->get());
+        return response()->json(Store::with(['product', 'user'])->get());
     }
 
     public function store(Request $request)
@@ -26,18 +27,18 @@ class InventoryController extends Controller
             return response()->json($validator->errors(), 422);
         }
 
-        $inventory = Inventory::create(array_merge(
+        $Store = Store::create(array_merge(
             $validator->validated(),
             ['user_id' => auth()->id()]
         ));
 
         return response()->json([
-            'message' => 'Inventory record created successfully',
-            'inventory' => $inventory->load(['product', 'user']),
+            'message' => 'Store record created successfully',
+            'Store' => $Store->load(['product', 'user']),
         ], 201);
     }
 
-    public function update(Request $request, Inventory $inventory)
+    public function update(Request $request, Store $Store)
     {
         $this->authorizeRoles(['admin', 'employee']);
 
@@ -50,22 +51,22 @@ class InventoryController extends Controller
             return response()->json($validator->errors(), 422);
         }
 
-        $inventory->update($validator->validated());
+        $Store->update($validator->validated());
 
         return response()->json([
-            'message' => 'Inventory record updated successfully',
-            'inventory' => $inventory->load(['product', 'user']),
+            'message' => 'Store record updated successfully',
+            'Store' => $Store->load(['product', 'user']),
         ]);
     }
 
-    public function destroy(Inventory $inventory)
+    public function destroy(Store $Store)
     {
         $this->authorizeRoles(['admin', 'employee']);
 
-        $inventory->delete();
+        $Store->delete();
 
         return response()->json([
-            'message' => 'Inventory record deleted successfully',
+            'message' => 'Store record deleted successfully',
         ]);
     }
 

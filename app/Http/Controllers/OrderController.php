@@ -40,7 +40,7 @@ class OrderController extends Controller
 
         if ($request->quantity > $product->quantity) {
             return response()->json([
-                'message' => 'Requested quantity exceeds available inventory',
+                'message' => 'Requested quantity exceeds available Store',
             ], 422);
         }
 
@@ -60,7 +60,7 @@ class OrderController extends Controller
 
         if ($newQuantity > $product->quantity) {
             return response()->json([
-                'message' => 'Requested quantity exceeds available inventory',
+                'message' => 'Requested quantity exceeds available Store',
             ], 422);
         }
 
@@ -102,7 +102,7 @@ class OrderController extends Controller
         $product = Product::find($item->product_id);
         if ($request->quantity > $product->quantity) {
             return response()->json([
-                'message' => 'Requested quantity exceeds available inventory',
+                'message' => 'Requested quantity exceeds available Store',
             ], 422);
         }
 
@@ -162,7 +162,7 @@ class OrderController extends Controller
 
             if (! $product || $product->quantity < $item->quantity) {
                 return response()->json([
-                    'message' => 'Inventory no longer contains enough stock for product: ' . ($product?->name ?? 'unknown'),
+                    'message' => 'Store no longer contains enough stock for product: ' . ($product?->name ?? 'unknown'),
                 ], 422);
             }
         }

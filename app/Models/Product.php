@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Store;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
@@ -10,6 +11,7 @@ class Product extends Model
     use HasFactory;
 
     protected $fillable = [
+        'store_id',
         'name',
         'description',
         'price',
@@ -20,14 +22,11 @@ class Product extends Model
         'price' => 'decimal:2',
     ];
 
-    public function inventory()
-    {
-        return $this->hasOne(Inventory::class);
-    }
 
-    public function inventories()
+
+    public function store()
     {
-        return $this->belongsTo(Inventory::class);
+        return $this->belongsTo(Store::class);
     }
 
     public function favourites()
