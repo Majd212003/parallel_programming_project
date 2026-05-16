@@ -11,13 +11,10 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('payments_tablee', function (Blueprint $table) {
+        Schema::create('favourites_table', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')->constrained()->onDelete('cascade');
-            $table->foreignId('order_id')->constrained()->onDelete('cascade');
-            $table->decimal('amount', 8, 2);
-            $table->enum('status', ['pending', 'completed', 'failed'])->default('pending');
-            $table->string('payment_method');
+            $table->foreignId('product_id')->constrained()->onDelete('cascade');
             $table->timestamps();
         });
     }
@@ -27,6 +24,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('payments_tablee');
+        Schema::dropIfExists('favourites_tablee');
     }
 };

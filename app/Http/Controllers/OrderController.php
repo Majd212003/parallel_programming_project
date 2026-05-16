@@ -6,7 +6,9 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Payment;
 use App\Models\Product;
+use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 
 class OrderController extends Controller
@@ -71,12 +73,13 @@ class OrderController extends Controller
                 'product_id' => $product->id,
                 'quantity' => $request->quantity,
                 'price_at_purchase' => $product->price,
+                'total_amount' => $request->quantity * $product->price
             ]);
             $order->orderItems()->save($item);
         }
 
-        $item->total_amount = $item->quantity * $item->price_at_purchase;
-        $item->save();
+        // $item->total_amount = $item->quantity * $item->price_at_purchase;
+       // $item->save();
 
         $this->updateOrderTotals($order);
 
@@ -144,51 +147,76 @@ class OrderController extends Controller
 
     public function confirmCart(Request $request)
     {
-        $validator = Validator::make($request->all(), [
-            'payment_method' => 'required|string|max:255',
-        ]);
+    $validator = Validator::make($request->all(), [
+        'payment_method' => 'required|string|max:255',
+    ]);
 
-        if ($validator->fails()) {
-            return response()->json($validator->errors(), 422);
-        }
+    if ($validator->fails()) {
+        return response()->json($validator->errors(), 422);
+    }
 
-        $order = $this->pendingOrder();
-        abort_if(! $order || $order->orderItems()->count() === 0, 404, 'No active cart found');
+    $order = $this->pendingOrder();
+    abort_if(! $order || $order->orderItems()->count() === 0, 404, 'No active cart found');
 
-        $this->updateOrderTotals($order);
+    $this->updateOrderTotals($order);
 
-        foreach ($order->orderItems as $item) {
-            $product = Product::find($item->product_id);
+    try {
+        DB::transaction(function () use ($request, $order) {
+            $user = User::where('id', auth()->id())->lockForUpdate()->first();
+            $order = Order::where('id', $order->id)
+                ->with('orderItems.product')
+                ->lockForUpdate()
+                ->first();
 
-            if (! $product || $product->quantity < $item->quantity) {
-                return response()->json([
-                    'message' => 'Store no longer contains enough stock for product: ' . ($product?->name ?? 'unknown'),
-                ], 422);
+            foreach ($order->orderItems as $item) {
+                $product = Product::where('id', $item->product_id)->lockForUpdate()->first();
+
+                if (! $product || $product->quantity < $item->quantity) {
+                    throw new \RuntimeException(
+                        'Store no longer contains enough stock for product: ' . ($product?->name ?? 'unknown')
+                    );
+                }
             }
-        }
 
-        foreach ($order->orderItems as $item) {
-            $product = Product::find($item->product_id);
-            $product->decrement('quantity', $item->quantity);
-        }
+            if ((float) $user->wallet_balance < (float) $order->total_price) {
+                throw new \RuntimeException('Insufficient wallet balance');
+            }
 
-        $order->update([
-            'status' => 'completed',
-            'is_paid' => true,
-        ]);
+            foreach ($order->orderItems as $item) {
+                $product = Product::where('id', $item->product_id)->lockForUpdate()->first();
+                $product->decrement('quantity', $item->quantity);
+            }
 
-        $payment = Payment::create([
-            'user_id' => auth()->id(),
-            'order_id' => $order->id,
-            'amount' => $order->total_price,
-            'payment_method' => $request->payment_method,
-            'status' => 'completed',
-        ]);
+            $user->decrement('wallet_balance', $order->total_price);
+
+            $order->update([
+                'status' => 'completed',
+                'is_paid' => true,
+            ]);
+
+            Payment::create([
+                'user_id' => auth()->id(),
+                'order_id' => $order->id,
+                'amount' => $order->total_price,
+                'payment_method' => $request->payment_method,
+                'status' => 'completed',
+            ]);
+        });
+    } catch (\RuntimeException $e) {
+        return response()->json([
+            'message' => $e->getMessage(),
+        ], 422);
+    }
+
+        $latestOrder = \App\Models\Order::with(['orderItems.product', 'payment'])
+            ->where('user_id', auth()->id())
+            ->latest()
+            ->first();
 
         return response()->json([
             'message' => 'Cart confirmed and order completed',
-            'order' => $order->load('orderItems.product', 'payment'),
-            'payment' => $payment,
+            'order' => $latestOrder,
+            'wallet_balance' => auth()->user()->fresh()->wallet_balance,
         ]);
     }
 
