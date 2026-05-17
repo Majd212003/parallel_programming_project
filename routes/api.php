@@ -32,7 +32,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::middleware(['auth:sanctum', 'role:user'])->group(function () {
     Route::get('/wallet', [WalletController::class, 'show']);
-    Route::post('/wallet/deposit', [WalletController::class, 'deposit']);
+    Route::post('/wallet/deposit', [WalletController::class, 'deposit'])->middleware('throttle:wallet-deposit');
 });
 
     Route::post('/logout', [AuthController::class, 'logout']);
@@ -43,10 +43,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/Store', [StoreController::class, 'index']);
 
     Route::get('/cart', [OrderController::class, 'currentCart']);
-    Route::post('/cart/add', [OrderController::class, 'addToCart']);
+    Route::post('/cart/add', [OrderController::class, 'addToCart'])->middleware('throttle:cart-write');
     Route::put('/cart/items/{item}', [OrderController::class, 'updateCartItem']);
     Route::delete('/cart/items/{item}', [OrderController::class, 'removeCartItem']);
-    Route::post('/cart/confirm', [OrderController::class, 'confirmCart']);
+    Route::post('/cart/confirm', [OrderController::class, 'confirmCart'])->middleware('throttle:cart-write');
 
     Route::get('/orders', [OrderController::class, 'userOrders']);
     Route::get('/orders/{order}', [OrderController::class, 'show']);
@@ -59,20 +59,20 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/profile', [UserController::class, 'updateProfile']);
 
     Route::middleware('role:admin,employee')->group(function () {
-        Route::post('/products', [ProductController::class, 'store']);
-        Route::put('/products/{product}', [ProductController::class, 'update']);
-        Route::delete('/products/{product}', [ProductController::class, 'destroy']);
+        Route::post('/products', [ProductController::class, 'store'])->middleware('throttle:admin-write');
+        Route::put('/products/{product}', [ProductController::class, 'update'])->middleware('throttle:admin-write');
+        Route::delete('/products/{product}', [ProductController::class, 'destroy'])->middleware('throttle:admin-write');
 
-        Route::post('/Store', [StoreController::class, 'store']);
-        Route::put('/Store/{Store}', [StoreController::class, 'update']);
-        Route::delete('/Store/{Store}', [StoreController::class, 'destroy']);
+        Route::post('/Store', [StoreController::class, 'store'])->middleware('throttle:admin-write');
+        Route::put('/Store/{Store}', [StoreController::class, 'update'])->middleware('throttle:admin-write');
+        Route::delete('/Store/{Store}', [StoreController::class, 'destroy'])->middleware('throttle:admin-write');
     });
 
     Route::middleware('role:admin')->group(function () {
         Route::get('/admin/users', [UserController::class, 'index']);
         Route::get('/admin/users/{user}', [UserController::class, 'show']);
-        Route::put('/admin/users/{user}', [UserController::class, 'update']);
-        Route::delete('/admin/users/{user}', [UserController::class, 'destroy']);
+        Route::put('/admin/users/{user}', [UserController::class, 'update'])->middleware('throttle:admin-write');
+        Route::delete('/admin/users/{user}', [UserController::class, 'destroy'])->middleware('throttle:admin-write');
 
         Route::get('/admin/orders', [OrderController::class, 'adminOrders']);
         Route::get('/admin/payments', [PaymentController::class, 'index']);
