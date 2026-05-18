@@ -27,6 +27,7 @@ class ProcessOrdersBatch implements ShouldQueue
      */
     public function handle(): void
     {
+        
         $loadBalancer = new LoadBalancerService();
         Order::with(['user', 'payment'])
             ->chunkById(50, function ($orders) use ($loadBalancer) {

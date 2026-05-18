@@ -8,6 +8,7 @@ use App\Http\Controllers\ProductController;
 use App\Http\Controllers\StoreController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\WalletController;
+use App\Jobs\ProcessOrdersBatch;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -25,15 +26,34 @@ use Illuminate\Support\Facades\Route;
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
 
+
+Route::post('/test-batch', function () {
+
+    ProcessOrdersBatch::dispatch();
+
+    return response()->json([
+        'message' => 'Batch job dispatched successfully'
+    ]);
+});
+
+
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', function (Request $request) {
         return $request->user();
     });
 
+
+
     Route::middleware(['auth:sanctum', 'role:user'])->group(function () {
     Route::get('/wallet', [WalletController::class, 'show']);
     Route::post('/wallet/deposit', [WalletController::class, 'deposit'])->middleware('throttle:wallet-deposit');
 });
+
+Route::middleware('role:user')->group(function () {
+    Route::post('/orders/direct', [OrderController::class, 'directOrder'])->middleware('throttle:direct-order') ;
+});
+
+
 
     Route::post('/logout', [AuthController::class, 'logout']);
 
