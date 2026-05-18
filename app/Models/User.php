@@ -24,7 +24,9 @@ class User extends Authenticatable
         'phone_number',
         'password',
         'role',
-        'status'
+        'status' ,
+        'wallet_balance'
+
     ];
 
     /**
@@ -44,6 +46,7 @@ class User extends Authenticatable
      */
     protected $casts = [
         'email_verified_at' => 'datetime',
+        'wallet_balance' => 'decimal:2',
     ];
 
     public function orders()

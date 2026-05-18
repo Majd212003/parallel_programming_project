@@ -23,6 +23,7 @@ class ProductController extends Controller
         $this->authorizeRoles(['admin', 'employee']);
 
         $validator = Validator::make($request->all(), [
+            'store_id' => 'required|exists:stores,id',
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
             'price' => 'required|numeric|min:0',
