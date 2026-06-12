@@ -2,15 +2,17 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\GenerateOrderInvoice;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Payment;
 use App\Models\Product;
 use App\Models\User;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
-use App\Jobs\GenerateOrderInvoice;
 
 class OrderController extends Controller
 {
@@ -26,74 +28,82 @@ class OrderController extends Controller
             return response()->json($validator->errors(), 422);
         }
 
+        $lockKey = "stock:product:{$request->product_id}";
+
         try {
-            DB::transaction(function () use ($request, &$createdOrder) {
-                $user = User::where('id', auth()->id())
-                    ->lockForUpdate()
-                    ->firstOrFail();
+            return Cache::lock($lockKey, 10)->block(5, function () use ($request) {
+                DB::transaction(function () use ($request, &$createdOrder) {
+                    $user = User::where('id', auth()->id())
+                        ->lockForUpdate()
+                        ->firstOrFail();
 
-                $product = Product::where('id', $request->product_id)
-                    ->lockForUpdate()
-                    ->firstOrFail();
+                    $product = Product::where('id', $request->product_id)
+                        ->lockForUpdate()
+                        ->firstOrFail();
 
-                if ($product->quantity < $request->quantity) {
-                    throw new \RuntimeException(
-                        'Store no longer contains enough stock for product: ' . $product->name
-                    );
-                }
+                    if ($product->quantity < $request->quantity) {
+                        throw new \RuntimeException(
+                            'Store no longer contains enough stock for product: ' . $product->name
+                        );
+                    }
 
-                $totalPrice = $product->price * $request->quantity;
+                    $totalPrice = $product->price * $request->quantity;
 
-                if ((float) $user->wallet_balance < (float) $totalPrice) {
-                    throw new \RuntimeException('Insufficient wallet balance');
-                }
+                    if ((float) $user->wallet_balance < (float) $totalPrice) {
+                        throw new \RuntimeException('Insufficient wallet balance');
+                    }
 
-                $createdOrder = Order::create([
-                    'user_id' => $user->id,
-                    'total_price' => $totalPrice,
-                    'status' => 'pending',
-                    'is_paid' => false,
-                ]);
+                    $createdOrder = Order::create([
+                        'user_id' => $user->id,
+                        'total_price' => $totalPrice,
+                        'status' => 'pending',
+                        'is_paid' => false,
+                    ]);
 
-                OrderItem::create([
-                    'order_id' => $createdOrder->id,
-                    'product_id' => $product->id,
-                    'quantity' => $request->quantity,
-                    'total_amount' => $totalPrice,
-                    'price_at_purchase' => $product->price,
-                ]);
+                    OrderItem::create([
+                        'order_id' => $createdOrder->id,
+                        'product_id' => $product->id,
+                        'quantity' => $request->quantity,
+                        'total_amount' => $totalPrice,
+                        'price_at_purchase' => $product->price,
+                    ]);
 
-                $product->decrement('quantity', $request->quantity);
-                $user->decrement('wallet_balance', $totalPrice);
+                    $product->decrement('quantity', $request->quantity);
+                    $user->decrement('wallet_balance', $totalPrice);
 
-                $createdOrder->update([
-                    'status' => 'completed',
-                    'is_paid' => true,
-                ]);
+                    $createdOrder->update([
+                        'status' => 'completed',
+                        'is_paid' => true,
+                    ]);
 
-                Payment::create([
-                    'user_id' => $user->id,
-                    'order_id' => $createdOrder->id,
-                    'amount' => $totalPrice,
-                    'payment_method' => $request->payment_method,
-                    'status' => 'completed',
-                ]);
+                    Payment::create([
+                        'user_id' => $user->id,
+                        'order_id' => $createdOrder->id,
+                        'amount' => $totalPrice,
+                        'payment_method' => $request->payment_method,
+                        'status' => 'completed',
+                    ]);
+                });
+
+                $latestOrder = Order::with(['orderItems.product', 'payment'])
+                    ->latest()
+                    ->first();
+
+                return response()->json([
+                    'message' => 'Direct order created successfully',
+                    'order' => $latestOrder,
+                    'wallet_balance' => auth()->user()->fresh()->wallet_balance,
+                ], 201);
             });
+        } catch (LockTimeoutException $e) {
+            return response()->json([
+                'message' => 'System is busy, please try again shortly.',
+            ], 423);
         } catch (\RuntimeException $e) {
             return response()->json([
                 'message' => $e->getMessage(),
             ], 422);
         }
-
-        $latestOrder = Order::with(['orderItems.product', 'payment'])
-            ->latest()
-            ->first();
-
-        return response()->json([
-            'message' => 'Direct order created successfully',
-            'order' => $latestOrder,
-            'wallet_balance' => auth()->user()->fresh()->wallet_balance,
-        ], 201);
     }
 
 
@@ -256,82 +266,91 @@ class OrderController extends Controller
 
         $confirmedOrderId = $order->id;
 
+        $lockKey = "order:confirm:{$confirmedOrderId}";
+
         try {
-            DB::transaction(function () use ($request, $confirmedOrderId) {
+            return Cache::lock($lockKey, 10)->block(5, function () use ($request, $confirmedOrderId) {
 
-                // lock user row
-                $user = User::where('id', auth()->id())
-                    ->lockForUpdate()
-                    ->firstOrFail();
+                DB::transaction(function () use ($request, $confirmedOrderId) {
 
-                // lock order row
-                $order = Order::where('id', $confirmedOrderId)
-                    ->with(['orderItems.product'])
-                    ->lockForUpdate()
-                    ->firstOrFail();
-
-                // check stock with locked products
-                foreach ($order->orderItems->sortBy('product_id') as $item) {
-                    $product = Product::where('id', $item->product_id)
+                    // lock user row
+                    $user = User::where('id', auth()->id())
                         ->lockForUpdate()
                         ->firstOrFail();
 
-                    if ($product->quantity < $item->quantity) {
-                        throw new \RuntimeException(
-                            'Store no longer contains enough stock for product: ' . $product->name
-                        );
+                    // lock order row
+                    $order = Order::where('id', $confirmedOrderId)
+                        ->with(['orderItems.product'])
+                        ->lockForUpdate()
+                        ->firstOrFail();
+
+                    // check stock with locked products
+                    foreach ($order->orderItems->sortBy('product_id') as $item) {
+                        $product = Product::where('id', $item->product_id)
+                            ->lockForUpdate()
+                            ->firstOrFail();
+
+                        if ($product->quantity < $item->quantity) {
+                            throw new \RuntimeException(
+                                'Store no longer contains enough stock for product: ' . $product->name
+                            );
+                        }
                     }
-                }
 
-                // wallet check
-                if ((float) $user->wallet_balance < (float) $order->total_price) {
-                    throw new \RuntimeException('Insufficient wallet balance');
-                }
+                    // wallet check
+                    if ((float) $user->wallet_balance < (float) $order->total_price) {
+                        throw new \RuntimeException('Insufficient wallet balance');
+                    }
 
-                // decrement stock
-                foreach ($order->orderItems->sortBy('product_id') as $item) {
-                    $product = Product::where('id', $item->product_id)
-                        ->lockForUpdate()
-                        ->firstOrFail();
+                    // decrement stock
+                    foreach ($order->orderItems->sortBy('product_id') as $item) {
+                        $product = Product::where('id', $item->product_id)
+                            ->lockForUpdate()
+                            ->firstOrFail();
 
-                    $product->decrement('quantity', $item->quantity);
-                }
+                        $product->decrement('quantity', $item->quantity);
+                    }
 
-                // decrement wallet
-                $user->decrement('wallet_balance', $order->total_price);
+                    // decrement wallet
+                    $user->decrement('wallet_balance', $order->total_price);
 
-                // complete order
-                $order->update([
-                    'status' => 'completed',
-                    'is_paid' => true,
-                ]);
+                    // complete order
+                    $order->update([
+                        'status' => 'completed',
+                        'is_paid' => true,
+                    ]);
 
-                // create payment
-                Payment::create([
-                    'user_id' => $user->id,
-                    'order_id' => $order->id,
-                    'amount' => $order->total_price,
-                    'payment_method' => $request->payment_method,
-                    'status' => 'completed',
+                    // create payment
+                    Payment::create([
+                        'user_id' => $user->id,
+                        'order_id' => $order->id,
+                        'amount' => $order->total_price,
+                        'payment_method' => $request->payment_method,
+                        'status' => 'completed',
+                    ]);
+                });
+
+                $latestOrder = Order::with(['orderItems.product', 'payment'])
+                    ->where('id', $confirmedOrderId)
+                    ->first();
+
+                GenerateOrderInvoice::dispatch($latestOrder->id);
+
+                return response()->json([
+                    'message' => 'Cart confirmed and order completed',
+                    'order' => $latestOrder,
+                    'wallet_balance' => auth()->user()->fresh()->wallet_balance,
                 ]);
             });
+        } catch (LockTimeoutException $e) {
+            return response()->json([
+                'message' => 'System is busy, please try again shortly.',
+            ], 423);
         } catch (\RuntimeException $e) {
             return response()->json([
                 'message' => $e->getMessage(),
             ], 422);
         }
-
-        $latestOrder = Order::with(['orderItems.product', 'payment'])
-            ->where('id', $confirmedOrderId)
-            ->first();
-        GenerateOrderInvoice::dispatch($latestOrder->id);
-
-
-        return response()->json([
-            'message' => 'Cart confirmed and order completed',
-            'order' => $latestOrder,
-            'wallet_balance' => auth()->user()->fresh()->wallet_balance,
-        ]);
     }
 
     public function userOrders()
