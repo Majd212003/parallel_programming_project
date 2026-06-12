@@ -6,12 +6,17 @@ namespace App\Http\Controllers;
 use App\Models\Store;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Cache;
 
 class StoreController extends Controller
 {
     public function index()
     {
-        return response()->json(Store::with(['product', 'user'])->get());
+        $stores = Cache::remember('stores.all', 60, function () {
+        return Store::latest()->get();
+    });
+
+    return response()->json($stores);
     }
 
     public function store(Request $request)
@@ -31,6 +36,8 @@ class StoreController extends Controller
             $validator->validated(),
             ['user_id' => auth()->id()]
         ));
+        Cache::forget('stores.all');
+        Cache::forget("stores.{$Store->id}");
 
         return response()->json([
             'message' => 'Store record created successfully',
@@ -52,6 +59,8 @@ class StoreController extends Controller
         }
 
         $Store->update($validator->validated());
+        Cache::forget('stores.all');
+        Cache::forget("stores.{$Store->id}");
 
         return response()->json([
             'message' => 'Store record updated successfully',
@@ -64,6 +73,8 @@ class StoreController extends Controller
         $this->authorizeRoles(['admin', 'employee']);
 
         $Store->delete();
+        Cache::forget('stores.all');
+        Cache::forget("stores.{$Store->id}");
 
         return response()->json([
             'message' => 'Store record deleted successfully',
