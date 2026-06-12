@@ -5,17 +5,26 @@ namespace App\Http\Controllers;
 use App\Models\Product;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Cache;
 
 class ProductController extends Controller
 {
     public function index()
     {
-        return response()->json(Product::all());
+        $products = Cache::remember('products.all', 60, function () {
+        return Product::with('store')->latest()->get();
+    });
+
+    return response()->json($products);
     }
 
     public function show(Product $product)
     {
-        return response()->json($product);
+        $cachedProduct = Cache::remember("products.{$product->id}", 60, function () use ($product) {
+        return $product->load('store');
+    });
+
+    return response()->json($cachedProduct);
     }
 
     public function store(Request $request)
@@ -35,11 +44,13 @@ class ProductController extends Controller
         }
 
         $product = Product::create($validator->validated());
+        Cache::forget('products.all');
 
         return response()->json([
             'message' => 'Product created successfully',
             'product' => $product,
         ], 201);
+
     }
 
     public function update(Request $request, Product $product)
@@ -64,11 +75,14 @@ class ProductController extends Controller
         }
 
         $product->update($validator->validated());
+        Cache::forget('products.all');
+        Cache::forget("products.{$product->id}");
 
         return response()->json([
             'message' => 'Product updated successfully',
             'product' => $product,
         ]);
+
     }
 
     public function destroy(Product $product)
@@ -76,6 +90,8 @@ class ProductController extends Controller
         $this->authorizeRoles(['admin', 'employee']);
 
         $product->delete();
+        Cache::forget('products.all');
+        Cache::forget("products.{$product->id}");
 
         return response()->json([
             'message' => 'Product deleted successfully',

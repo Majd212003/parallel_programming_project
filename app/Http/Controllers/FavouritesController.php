@@ -6,16 +6,20 @@ use App\Models\Favourite;
 use App\Models\Product;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Cache;
 
 class FavouritesController extends Controller
 {
     public function index()
     {
-        return response()->json(
-            Favourite::with('product')
-                ->where('user_id', auth()->id())
-                ->get()
-        );
+    $userId = auth()->id();
+
+        $favourites = Cache::remember("favourites.user.{$userId}", 60, function () use ($userId) {
+            return Favourite::with('product')
+                ->where('user_id', $userId)
+                ->get();
+        });
+        return response()->json($favourites);
     }
 
     public function store(Request $request)
@@ -32,6 +36,7 @@ class FavouritesController extends Controller
             'user_id' => auth()->id(),
             'product_id' => $request->product_id,
         ]);
+        Cache::forget("favourites.user." . auth()->id());
 
         return response()->json([
             'message' => 'Product added to favorites',
@@ -50,6 +55,7 @@ class FavouritesController extends Controller
         }
 
         $favorite->delete();
+        Cache::forget("favourites.user." . auth()->id());
 
         return response()->json(['message' => 'Product removed from favorites']);
     }
