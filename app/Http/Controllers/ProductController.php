@@ -11,11 +11,17 @@ class ProductController extends Controller
 {
     public function index()
     {
-        $products = Cache::remember('products.all', 60, function () {
-        return Product::with('store')->latest()->get();
-    });
+        $useCache = true ; // قبل التحسين: false | بعد التحسين: true
 
-    return response()->json($products);
+        if ($useCache) {
+            $products = Cache::remember('products.all', 60, function () {
+                return Product::with('store')->latest()->get();
+            });
+        } else {
+            $products = Product::with('store')->latest()->get();
+        }
+
+        return response()->json($products);
     }
 
     public function show(Product $product)
